@@ -8,7 +8,7 @@ A small Go REST API for creating, listing, updating, and deleting tasks stored i
 - Standard library `net/http` router and JSON encoding
 - PostgreSQL 15
 - `sqlx` and the `lib/pq` PostgreSQL driver
-- Docker Compose for the database
+- Docker Compose for the API and database
 
 ## Project structure
 
@@ -19,55 +19,76 @@ internal/database/database.go Database connection and connection pool
 internal/database/tasks.go    Task queries
 internal/models/task.go       Task model and request types
 sql/init.sql                  Initial schema and sample tasks
-docker-compose.yml            PostgreSQL service and persistent volume
+docker-compose.yml            API, PostgreSQL, and persistent volume
+Dockerfile                    Multi-stage API image build
+Makefile                      Development commands
 ```
 
-## Local setup
+## Quick start
 
-Run the following commands from the project root. You need Go and a running Docker installation with Docker Compose.
+Install Docker with Docker Compose and Make, then run from the project root:
 
-### 1. Configure the environment
+```sh
+make up
+```
 
-Create a `.env` file with the following example values. If the file already exists, keep your existing configuration and ensure the connection URL matches your database credentials.
+This builds the API image, starts PostgreSQL, waits for the database health check, and starts the API. With the default settings, the API is available at `http://localhost:8080`. Go does not need to be installed on your machine for this workflow.
+
+Without Make, use the equivalent command:
+
+```sh
+docker compose up --build
+```
+
+The first build requires internet access to download images and Go dependencies. Run `make up` again after changing Go code to rebuild the API image; there is no automatic reload.
+
+## Development commands
+
+| Command | Description |
+| --- | --- |
+| `make up` | Build and start the API and database with logs in the terminal |
+| `make down` | Stop and remove the containers, preserving database data |
+| `make logs` | Follow API container logs from another terminal |
+| `make test` | Run `go test ./...` using locally installed Go |
+| `make run` | Run the API locally using Go; PostgreSQL must already be running |
+
+For background startup, use `docker compose up --build -d`.
+
+## Configuration
+
+No `.env` file is required for a fresh local setup. Docker Compose uses these defaults, which you can override in a `.env` file in the project root:
 
 ```dotenv
 POSTGRES_DB=tasks
 POSTGRES_USER=tasks
 POSTGRES_PASSWORD=local_dev_password
-DATABASE_URL='postgres://tasks:local_dev_password@localhost:5432/tasks?sslmode=disable'
 SERVER_PORT=8080
 ```
 
-These credentials are for local development. `.env` is excluded from Git.
+These credentials are for local development. `.env` is excluded from Git and the Docker build context. Keep your existing credentials if you already have a database volume: changing these variables does not change users or passwords in an initialized database.
 
-Docker Compose reads `.env` automatically. The Go application reads environment variables and does not load `.env` itself.
+The containerized API connects to `postgres:5432`. Compose supplies the database name, user, and password through `PGDATABASE`, `PGUSER`, and `PGPASSWORD`, and sets `DATABASE_URL` to the internal database address. A `DATABASE_URL` in your local `.env` is used only by `make run` and does not override the container connection.
 
-### 2. Start PostgreSQL
-
-```sh
-docker compose up -d postgres
-```
-
-Check that the database is ready before starting the API:
-
-```sh
-docker compose exec postgres sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
-```
+PostgreSQL is exposed on port `5432`; the API is exposed on `SERVER_PORT` (default `8080`).
 
 On the first startup with an empty database volume, `sql/init.sql` creates the `tasks` table and inserts three sample tasks. It is not rerun on subsequent starts with the same volume. The script contains `DROP TABLE IF EXISTS tasks`, so manually rerunning it replaces existing task data.
 
-### 3. Start the API
+## Run the API without Docker
 
-Load the local `.env` file into your shell and run the application (Bash or Zsh):
+For local Go development, install the Go version specified in `go.mod`. Start only PostgreSQL, then run the API:
 
 ```sh
-set -a
-source .env
-set +a
-go run ./cmd/api
+docker compose up -d --wait postgres
+make run
 ```
 
-With the example configuration, the API is available at `http://localhost:8080`. Docker Compose runs only PostgreSQL; the API runs on your machine.
+`make run` loads `.env` when present and provides the same local defaults as Compose. The file must use shell-compatible assignments. To connect to a different database, set `DATABASE_URL`, for example:
+
+```dotenv
+DATABASE_URL='postgres://tasks:local_dev_password@localhost:5432/tasks?sslmode=disable'
+```
+
+Stop the containerized API before starting a local API on the same port (`docker compose stop api`). Stop the local API with `Ctrl+C`.
 
 ## API
 
@@ -141,7 +162,7 @@ Handler errors use this JSON format:
 ## Checks
 
 ```sh
-go test ./...
+make test
 go vet ./...
 ```
 
@@ -149,10 +170,10 @@ There are currently no automated test files; `go test` checks that the packages 
 
 ## Stop locally
 
-Stop the API with `Ctrl+C`, then stop the database:
+Stop the local API with `Ctrl+C` if it is running, then stop the Compose services:
 
 ```sh
-docker compose down
+make down
 ```
 
 The named database volume is preserved.

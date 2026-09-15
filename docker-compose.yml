@@ -1,11 +1,25 @@
 services:
+  api:
+    build: .
+    environment:
+      DATABASE_URL: "host=postgres port=5432 sslmode=disable"
+      PGDATABASE: ${POSTGRES_DB:-tasks}
+      PGUSER: ${POSTGRES_USER:-tasks}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-local_dev_password}
+      SERVER_PORT: "8080"
+    ports:
+      - '${SERVER_PORT:-8080}:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   postgres:
     image: postgres:15-alpine
     container_name: tasks_postgres
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-tasks}
+      POSTGRES_USER: ${POSTGRES_USER:-tasks}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_dev_password}
 
     ports:
       - '5432:5432'
@@ -13,7 +27,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
-
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
 volumes:
   postgres_data:
