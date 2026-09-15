@@ -166,7 +166,7 @@ make test
 go vet ./...
 ```
 
-There are currently no automated test files; `go test` checks that the packages compile.
+The tests cover HTTP method restrictions, task route dispatch, request validation, successful CRUD responses, storage error handling, and partial update inputs (including explicit `false` and empty descriptions). They use `httptest` and a stub task store, so PostgreSQL and Docker are not required. SQL queries and concurrent database updates are not covered by this suite.
 
 ## Stop locally
 

@@ -11,11 +11,19 @@ import (
 	"strings"
 )
 
-type Handlers struct {
-	store *database.TaskStore
+type TaskStore interface {
+	GetAll() ([]models.Task, error)
+	GetByID(int) (*models.Task, error)
+	Create(models.CreateTaskInput) (*models.Task, error)
+	Update(int, models.UpdateTaskInput) (*models.Task, error)
+	Delete(int) error
 }
 
-func NewHandler(store *database.TaskStore) *Handlers {
+type Handlers struct {
+	store TaskStore
+}
+
+func NewHandler(store TaskStore) *Handlers {
 	return &Handlers{store: store}
 }
 
